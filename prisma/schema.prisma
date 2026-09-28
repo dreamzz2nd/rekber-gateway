@@ -1,0 +1,184 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  BUYER
+  SELLER
+}
+
+enum FeePayer {
+  BUYER
+  SELLER
+  SPLIT_50_50
+}
+
+enum TransactionStatus {
+  PENDING_VERIFICATION
+  GROUP_CREATED
+  WAITING_PAYMENT
+  PAID_HELD
+  IN_DELIVERY
+  COMPLETED
+  DISPUTED
+  REFUNDED
+  CANCELLED
+}
+
+enum DisputeStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED_RELEASE_SELLER
+  RESOLVED_REFUND_BUYER
+  CANCELLED
+}
+
+enum OtpStatus {
+  PENDING
+  VERIFIED
+  EXPIRED
+  FAILED
+}
+
+model User {
+  id           String        @id @default(uuid())
+  phoneNumber  String        @unique @map("phone_number")
+  isVerified   Boolean       @default(false) @map("is_verified")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  initiatedTransactions Transaction[] @relation("InitiatedTransactions")
+
+  @@index([phoneNumber])
+  @@map("users")
+}
+
+model Transaction {
+  id                  String            @id @default(uuid())
+  shortCode           String            @unique @map("short_code")
+  initiatorPhone      String            @map("initiator_phone")
+  initiatorRole       Role              @map("initiator_role")
+  buyerPhone          String            @map("buyer_phone")
+  sellerPhone         String            @map("seller_phone")
+  title               String            @map("title")
+  description         String?           @map("description")
+  
+  amount              Decimal           @db.Decimal(15, 2)
+  feeAmount           Decimal           @db.Decimal(15, 2) @map("fee_amount")
+  feePayer            FeePayer          @map("fee_payer")
+  totalAmount         Decimal           @db.Decimal(15, 2) @map("total_amount")
+
+  status              TransactionStatus @default(PENDING_VERIFICATION)
+  
+  // WhatsApp Integration Details
+  waGroupId           String?           @unique @map("wa_group_id")
+  waGroupInviteLink   String?           @map("wa_group_invite_link")
+  buyerJoined         Boolean           @default(false) @map("buyer_joined")
+  sellerJoined        Boolean           @default(false) @map("seller_joined")
+
+  // Payment Gateway Details
+  paymentId           String?           @unique @map("payment_id")
+  paymentMethod       String?           @map("payment_method") // QRIS, BNI_VA, BCA_VA, etc.
+  paymentStatus       String?           @map("payment_status") // PENDING, SETTLED, EXPIRED
+  paymentQrString     String?           @map("payment_qr_string")
+  paymentVaNumber     String?           @map("payment_va_number")
+  paymentSettledAt    DateTime?         @map("payment_settled_at")
+
+  // Payout / Disbursement Details
+  payoutId            String?           @unique @map("payout_id")
+  payoutStatus        String?           @map("payout_status") // PENDING, SUCCESS, FAILED
+  payoutReference     String?           @map("payout_reference")
+  payoutBeneficiaryBank    String?      @map("payout_beneficiary_bank")
+  payoutBeneficiaryAccount String?      @map("payout_beneficiary_account")
+  payoutBeneficiaryName    String?      @map("payout_beneficiary_name")
+  payoutDisbursedAt   DateTime?         @map("payout_disbursed_at")
+
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  initiator           User              @relation("InitiatedTransactions", fields: [initiatorPhone], references: [phoneNumber])
+  disputes            Dispute[]
+  auditLogs           AuditLog[]
+  paymentLogs         PaymentWebhookLog[]
+
+  @@index([buyerPhone])
+  @@index([sellerPhone])
+  @@index([status])
+  @@index([shortCode])
+  @@index([waGroupId])
+  @@map("transactions")
+}
+
+model Dispute {
+  id              String        @id @default(uuid())
+  transactionId   String        @map("transaction_id")
+  initiatorPhone  String        @map("initiator_phone")
+  reason          String        @map("reason")
+  status          DisputeStatus @default(OPEN)
+  adminNotes      String?       @map("admin_notes")
+  resolvedAt      DateTime?     @map("resolved_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  transaction     Transaction   @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
+  @@index([status])
+  @@map("disputes")
+}
+
+model OtpLog {
+  id                String    @id @default(uuid())
+  phone             String    @map("phone")
+  ipAddress         String    @map("ip_address")
+  deviceFingerprint String    @map("device_fingerprint")
+  otpCodeHash       String    @map("otp_code_hash")
+  attempts          Int       @default(0)
+  status            OtpStatus @default(PENDING)
+  expiresAt         DateTime  @map("expires_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  @@index([phone])
+  @@index([ipAddress])
+  @@index([deviceFingerprint])
+  @@index([createdAt])
+  @@map("otp_logs")
+}
+
+model PaymentWebhookLog {
+  id             String      @id @default(uuid())
+  transactionId  String?     @map("transaction_id")
+  idempotencyKey String      @unique @map("idempotency_key")
+  provider       String      @map("provider")
+  eventType      String      @map("event_type")
+  payload        Json        @map("payload")
+  status         String      @map("status")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  transaction    Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  @@index([idempotencyKey])
+  @@index([transactionId])
+  @@map("payment_webhook_logs")
+}
+
+model AuditLog {
+  id            String       @id @default(uuid())
+  transactionId String?      @map("transaction_id")
+  action        String       @map("action")
+  actor         String       @map("actor")
+  metadata      Json?        @map("metadata")
+  createdAt     DateTime     @default(now()) @map("created_at")
+
+  transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  @@index([transactionId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
