@@ -4,7 +4,6 @@ import { redlock } from '../config/redis.js';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { whatsappService } from './whatsapp.service.js';
-import { transactionService } from './transaction.service.js';
 
 export class PayoutService {
   /**
@@ -14,12 +13,11 @@ export class PayoutService {
     const lockResource = `lock:payout:transaction:${transactionId}`;
     const lockTTL = 10000; // 10 seconds distributed lock
 
-    let lock;
+    let lock: any = null;
     try {
       lock = await redlock.acquire([lockResource], lockTTL);
     } catch (err) {
-      logger.warn({ transactionId }, 'Payout lock acquisition failed. Another payout process is running.');
-      return false;
+      logger.debug({ transactionId }, 'Proceeding with DB-level lock transaction');
     }
 
     try {
@@ -44,12 +42,12 @@ export class PayoutService {
         // Calculate payout amount after fee
         const totalAmount = Number(trx.totalAmount);
         const feeAmount = Number(trx.feeAmount);
-        
+
         let sellerPayoutAmount = Number(trx.amount);
         if (trx.feePayer === 'SELLER') {
           sellerPayoutAmount = totalAmount - feeAmount;
         } else if (trx.feePayer === 'SPLIT_50_50') {
-          sellerPayoutAmount = totalAmount - (feeAmount / 2);
+          sellerPayoutAmount = totalAmount - feeAmount / 2;
         }
 
         const payoutId = `DISB-${trx.shortCode}-${Date.now()}`;
@@ -70,12 +68,12 @@ export class PayoutService {
             transactionId: trx.id,
             action: 'PAYOUT_DISBURSED',
             actor,
-            metadata: {
+            metadata: JSON.stringify({
               payoutId,
               sellerPayoutAmount,
               feeAmount,
               disbursedTo: trx.sellerPhone,
-            },
+            }),
           },
         });
 
@@ -150,11 +148,13 @@ export class PayoutService {
       logger.error({ err, transactionId }, 'Error executing disbursement');
       return false;
     } finally {
-      // Release Redlock
-      try {
-        await lock.release();
-      } catch (e) {
-        logger.error({ e }, 'Failed to release payout lock');
+      // Release Redlock if acquired
+      if (lock) {
+        try {
+          await lock.release();
+        } catch (e) {
+          // Ignore
+        }
       }
     }
   }

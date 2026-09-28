@@ -134,7 +134,7 @@ export class PaymentService {
         idempotencyKey,
         provider,
         eventType: transactionStatus,
-        payload: rawPayload,
+        payload: JSON.stringify(rawPayload),
         status: 'SUCCESS',
       },
     });

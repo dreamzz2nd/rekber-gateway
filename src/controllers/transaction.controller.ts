@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { Role, FeePayer } from '@prisma/client';
-import { transactionService } from '../services/transaction.service.js';
+import { transactionService, Role, FeePayer } from '../services/transaction.service.js';
 import { otpService } from '../services/otp.service.js';
 import { whatsappService } from '../services/whatsapp.service.js';
 

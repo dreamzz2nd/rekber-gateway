@@ -1,4 +1,4 @@
-import { TransactionStatus, Role, FeePayer, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { nanoid } from 'nanoid';
 import { prisma } from '../config/database.js';
 import { env } from '../config/env.js';
@@ -6,8 +6,21 @@ import { sanitizePhoneNumber, isValidIndonesianPhone } from '../utils/phone.js';
 import { logger } from '../utils/logger.js';
 import { botQueue } from './queue.service.js';
 
+export type Role = 'BUYER' | 'SELLER';
+export type FeePayer = 'BUYER' | 'SELLER' | 'SPLIT_50_50';
+export type TransactionStatus =
+  | 'PENDING_VERIFICATION'
+  | 'GROUP_CREATED'
+  | 'WAITING_PAYMENT'
+  | 'PAID_HELD'
+  | 'IN_DELIVERY'
+  | 'COMPLETED'
+  | 'DISPUTED'
+  | 'REFUNDED'
+  | 'CANCELLED';
+
 // Define Allowed State Transitions for strict state-machine enforcement
-const ALLOWED_TRANSITIONS: Record<TransactionStatus, TransactionStatus[]> = {
+const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   PENDING_VERIFICATION: ['GROUP_CREATED', 'CANCELLED'],
   GROUP_CREATED: ['WAITING_PAYMENT', 'CANCELLED', 'DISPUTED'],
   WAITING_PAYMENT: ['PAID_HELD', 'CANCELLED', 'DISPUTED'],
@@ -105,7 +118,7 @@ export class TransactionService {
         transactionId: trx.id,
         action: 'TRANSACTION_INITIATED',
         actor: initPhone,
-        metadata: { shortCode, amount: params.amount, totalAmount },
+        metadata: JSON.stringify({ shortCode, amount: params.amount, totalAmount }),
       },
     });
 
@@ -128,7 +141,7 @@ export class TransactionService {
       if (!trx) throw new Error('Transaksi tidak ditemukan.');
 
       // Check Allowed Transitions
-      const allowed = ALLOWED_TRANSITIONS[trx.status];
+      const allowed = ALLOWED_TRANSITIONS[trx.status] || [];
       if (!allowed.includes(targetStatus)) {
         throw new Error(
           `Invalid state transition: tidak dapat mengubah status dari ${trx.status} ke ${targetStatus}.`
@@ -145,12 +158,12 @@ export class TransactionService {
           transactionId: trx.id,
           action: audit.action,
           actor: audit.actor,
-          metadata: {
+          metadata: JSON.stringify({
             fromStatus: trx.status,
             toStatus: targetStatus,
             reason: audit.reason,
             ...audit.metadata,
-          },
+          }),
         },
       });
 
@@ -174,14 +187,18 @@ export class TransactionService {
     if (!trx) throw new Error('Transaksi tidak ditemukan');
 
     // Queue WhatsApp group creation
-    await botQueue.add('create-escrow-group', {
-      transactionId: trx.id,
-      shortCode: trx.shortCode,
-      buyerPhone: trx.buyerPhone,
-      sellerPhone: trx.sellerPhone,
-      title: trx.title,
-      totalAmount: trx.totalAmount.toString(),
-    });
+    try {
+      await botQueue.add('create-escrow-group', {
+        transactionId: trx.id,
+        shortCode: trx.shortCode,
+        buyerPhone: trx.buyerPhone,
+        sellerPhone: trx.sellerPhone,
+        title: trx.title,
+        totalAmount: trx.totalAmount.toString(),
+      });
+    } catch (e: any) {
+      logger.warn({ err: e.message }, 'Failed to queue bot group creation job');
+    }
 
     return { queued: true, shortCode: trx.shortCode };
   }

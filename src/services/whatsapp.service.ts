@@ -232,7 +232,8 @@ export class WhatsAppService {
   private async handleGroupParticipantsUpdate(event: {
     id: string; // Group ID
     participants: string[];
-    action: 'add' | 'remove' | 'promote' | 'demote';
+    action: string;
+    author?: string;
   }) {
     const { id: groupId, participants, action } = event;
 
