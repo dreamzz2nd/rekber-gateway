@@ -4,7 +4,7 @@ Platform Rekening Bersama (Escrow Vault) otomatis berbasis **Node.js (TypeScript
 
 ---
 
-## 🌟 Architecture Overview
+##  Architecture Overview
 
 ```
                           +-----------------------------------+
@@ -48,7 +48,7 @@ Platform Rekening Bersama (Escrow Vault) otomatis berbasis **Node.js (TypeScript
 
 ---
 
-## 🔐 Security & Anti-Abuse Modules
+##  Security & Anti-Abuse Modules
 
 1. **Multi-tier Rate Limiter (`src/middlewares/rateLimiter.ts`)**:
    - **IP Address Throttling**: Maksimal 5x request OTP per 1 jam per IP.
@@ -63,7 +63,7 @@ Platform Rekening Bersama (Escrow Vault) otomatis berbasis **Node.js (TypeScript
 
 ---
 
-## 🤖 WhatsApp Bot Lifecycle
+##  WhatsApp Bot Lifecycle
 
 | Tahap | Event Trigger | Tindakan Bot |
 |---|---|---|
@@ -78,7 +78,7 @@ Platform Rekening Bersama (Escrow Vault) otomatis berbasis **Node.js (TypeScript
 
 ---
 
-## 🗄️ Database Entities (Prisma Schema)
+##  Database Entities (Prisma Schema)
 
 - **`User`**: Data inisiator dan verifikasi akun.
 - **`Transaction`**: Rekod transaksi, status, nomor pembeli & penjual, biaya escrow, link grup WA, ID pembayaran & payout.
@@ -89,7 +89,7 @@ Platform Rekening Bersama (Escrow Vault) otomatis berbasis **Node.js (TypeScript
 
 ---
 
-## 🚀 Quick Start Guide
+##  Quick Start Guide
 
 ### 1. Prasyarat
 - Node.js (v18+)
